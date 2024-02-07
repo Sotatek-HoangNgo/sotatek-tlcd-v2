@@ -2,7 +2,7 @@
 
 ## Phiên bản
 
-Bản cập nhật mới nhất: `1.1.2 Beta` (22/03/2023)
+Bản cập nhật mới nhất: `1.1.3` (07/02/2024)
 
 ## Giới thiệu
 
