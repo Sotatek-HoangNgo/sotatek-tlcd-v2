@@ -1,0 +1,58 @@
+{
+  "name": "Sotatek Time Left Countdown Beta 3",
+  "manifest_version": 3,
+  "version": "3.0.1",
+  "description": "This extension calculates time to left (the.do 07/12/2022)",
+  "permissions": [
+    "webNavigation",
+    "cookies",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
+  "background": {
+    "service_worker": "./dist/scripts/background.js"
+  },
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "author": "hoang.ngo (Hoangzzzsss)",
+  "icons": {
+    "16": "images/icon.png",
+    "32": "images/icon.png",
+    "48": "images/icon.png",
+    "128": "images/icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "./dist/scripts/content-scripts.js"
+      ]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "images/icon.png"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    },
+    {
+      "resources": [
+        "styles/styles.css"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "action": {
+    "default_popup": "./dist/templates/popup/index.html"
+  }
+}
