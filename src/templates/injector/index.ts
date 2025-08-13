@@ -1,6 +1,8 @@
-import { LOG_PREFIX, UI_IDS } from '@/constants/config';
-import CountdownApp from '@/modules/injector/index.vue';
 import { createApp } from 'vue';
+import CountdownApp from '@/modules/injector/index.vue';
+import { notifyAppMountMessage } from '@/modules/injector/utils/bridgeMessaging';
+import { GCHAT_INJECT_TARGET_SELECTOR, LOG_PREFIX, UI_IDS } from '@/constants/config';
+
 import '@/styles/styles.css';
 
 function waitForSiteReady() {
@@ -24,31 +26,38 @@ function waitForSiteReady() {
 
 function setupUI() {
   const app = createApp(CountdownApp);
+  const isInjectToIframe = window.parent !== window;
+  const injectedAppElement = document.querySelector(`.${UI_IDS.APP_CONTAINER}`);
 
-  if (document.querySelector(`.${UI_IDS.APP_CONTAINER}`)) {
-    const container = document.querySelector(`.${UI_IDS.APP_CONTAINER}`);
-
-    app.mount(container!);
-    console.log(LOG_PREFIX, 'UI containers set up.', app);
+  if (injectedAppElement) {
     return;
   }
 
-  let previousSiblings = document.querySelector('.SuElue');
+  const iframeLeftPanel = document.querySelector(GCHAT_INJECT_TARGET_SELECTOR.IFRAME_LEFT_PANEL);
+  const leftPanelContainer = document.querySelector(GCHAT_INJECT_TARGET_SELECTOR.LEFT_PANEL_CONTAINER);
 
-  if (!previousSiblings) {
-    previousSiblings = document.querySelector('.cYHKzf');
+  let container = leftPanelContainer;
 
-    if (!previousSiblings) {
-      previousSiblings = document.body.firstElementChild;
-    }
+  if (isInjectToIframe) {
+    const injectContainer = document.createElement('div');
+
+    iframeLeftPanel?.insertAdjacentElement('afterend', injectContainer);
+
+    container = injectContainer;
   }
 
-  const container = document.createElement('div');
+  if (!container) {
+    console.log(LOG_PREFIX, 'Failed to find container for injector.', app);
+
+    return;
+  }
+
   container.classList.add(UI_IDS.APP_CONTAINER);
 
-  previousSiblings?.insertAdjacentElement('afterend', container);
+  notifyAppMountMessage(isInjectToIframe);
 
   app.mount(container);
+
   console.log(LOG_PREFIX, 'UI containers set up.', app);
 }
 

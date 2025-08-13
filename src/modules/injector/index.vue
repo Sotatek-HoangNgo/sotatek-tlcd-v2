@@ -84,6 +84,9 @@ import useCalculateMonthlyLateness from '@/hooks/useCalculateMonthlyLateness';
 import { useCountdownTimeLeft } from '@/hooks/useCountdownTimeLeft';
 import useLoginStatus from '@/hooks/useLoginStatus';
 import { fetchGoHomeMessageText } from '@/utils/mics';
+import useBrigdeMessaging from './utils/bridgeMessaging';
+
+const { registerRefreshCountdownListener } = useBrigdeMessaging();
 
 const { getUserAttendanceInfo, message, workInfo } = useCountdownTimeLeft({
   onNoCheckingData: noTodayCheckinDataNotify,
@@ -158,14 +161,25 @@ async function displayGoHomeMessage() {
   };
 }
 
-onMounted(async () => {
+async function getAuthenStatusAndInitData() {
+  let hasInitData = false;
+
   try {
     const isLoggedIn = await retrieveLoginStatus(showErrorMessageWhenFailedToGetLoginStatus);
     if (isLoggedIn) {
-      await Promise.allSettled([calculateCurrentMonthLateTime(), getUserAttendanceInfo()]);
+      await Promise.allSettled([getUserAttendanceInfo(), calculateCurrentMonthLateTime()]);
+
+      hasInitData = true;
     }
   } catch (error) {
-    console.log('Encoutered while get data: ', error);
+    console.log('INJECTOR', 'Error while get authen status: ', error);
   }
+
+  return hasInitData;
+}
+
+onMounted(() => {
+  getAuthenStatusAndInitData();
+  registerRefreshCountdownListener(getAuthenStatusAndInitData);
 });
 </script>

@@ -25,6 +25,7 @@ export const COMMUNICATION_MESSAGE_KEYS = {
   INIT_CONNECTION: 'init_connection',
   REFRESH_COUNTDOWN: 'refresh_countdown',
   RESET_PORTAL_DATA: 'reset_portal_data',
+  SETUP_INJECTOR: 'setup_injector',
 } as const;
 
 // Constants for UI elements and classes (will be used in refactored version)
@@ -37,10 +38,9 @@ export const UI_IDS = {
 };
 
 // Class names for Google Chat UI (these are fragile and might change)
-export const GCHAT_CLASSES = {
-  LEFT_PANEL_CONTAINER: 'oy8Mbf', // Main container where to inject
-  COLLAPSED_PANEL_INDICATOR: 'bhZ', // Class present when panel is collapsed
-  // Note: More specific selectors might be needed if "oy8Mbf" is too generic
+export const GCHAT_INJECT_TARGET_SELECTOR = {
+  LEFT_PANEL_CONTAINER: '.oy8Mbf:not(.bGI)',
+  IFRAME_LEFT_PANEL: '.SuElue',
 };
 
 // Other constants

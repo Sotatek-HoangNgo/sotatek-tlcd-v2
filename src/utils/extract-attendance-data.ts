@@ -51,8 +51,8 @@ export function extractCurrentYearLeaveData(attendanceData: IOverviewAttendanceD
   const remainRemoteLeave =
     parseFloat(
       remainLeaves
-        .find((item) => item.includes('Remote leave'))
-        ?.slice('Remote leave:'.length)
+        .find((item) => item.includes('Remote'))
+        ?.slice('Remote:'.length)
         ?.trim() ?? '0',
     ) || 0;
 
