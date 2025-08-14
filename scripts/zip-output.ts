@@ -3,7 +3,7 @@ import { createWriteStream } from 'fs';
 import archiver from 'archiver';
 import { dir } from './utils';
 
-const zipSource = 'extension';
+const zipSource = 'dist/extension';
 const zipOutputDir = 'dist/release';
 
 zipExtensionFiles();

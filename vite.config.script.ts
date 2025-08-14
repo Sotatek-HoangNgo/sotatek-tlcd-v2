@@ -12,7 +12,7 @@ export default defineConfig(() => {
     build: {
       watch: isDev ? {} : undefined,
       assetsDir: 'styles',
-      outDir: dir('extension/dist'),
+      outDir: dir('dist/extension/dist'),
       cssCodeSplit: false,
       emptyOutDir: false,
       sourcemap,

@@ -16,7 +16,7 @@ export default defineConfig(({ command }) => {
       },
     },
     build: {
-      outDir: dir('extension/dist'),
+      outDir: dir('dist/extension/dist'),
       emptyOutDir: false,
       sourcemap,
       rollupOptions: {

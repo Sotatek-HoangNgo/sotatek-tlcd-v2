@@ -14,9 +14,7 @@
     "build:markup": "vite build",
     "build:js": "tsx scripts/build-scripts.ts",
     "pack-output": "tsx scripts/zip-output.ts",
-    "clear": "run-s clear:zip clear:ext",
-    "clear:ext": "rimraf extension/dist",
-    "clear:zip": "rimraf dist/release"
+    "clear": "rimraf dist/"
   },
   "author": "hoang.ngo (Hoangzzzsss)",
   "license": "ISC",

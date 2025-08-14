@@ -1,4 +1,6 @@
 import { exec } from 'child_process';
+import chokidar from 'chokidar';
+import { dir, isDev } from './utils';
 
 const entriesFile = ['injector', 'content-scripts', 'background'];
 
@@ -16,3 +18,11 @@ function buildEntries() {
 }
 
 buildEntries();
+
+if (isDev) {
+  const watchPaths = entriesFile.map((view) => dir(`src/templates/${view}/index.ts`));
+
+  chokidar.watch(watchPaths).on('change', () => {
+    buildEntries();
+  });
+}

@@ -131,7 +131,7 @@
         <p><strong>Author: </strong> Ngô Việt Hoàng (Hoangzzzsss - Hz)</p>
       </div>
       <div class="tw:flex tw:justify-between">
-        <p><strong>Mail ID: </strong> hoang.ngo</p>
+        <p><strong>Sotatek's ID: </strong> hoang.ngo</p>
         <p>Version: 2.0</p>
         <p>Github repo: <a href="https://github.com/Sotatek-HoangNgo/sotatek-tlcd-v2">Link</a></p>
       </div>
