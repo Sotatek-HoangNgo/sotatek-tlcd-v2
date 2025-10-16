@@ -23,7 +23,7 @@
     },
     "plugins": []
   },
-  "include": ["./src/**/*", "./vite-env.d.ts"],
+  "include": ["./src/**/*", "./vite-env.d.ts", "./src/@types/*.d.ts"],
   "exclude": ["node_modules", "dist"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

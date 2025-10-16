@@ -14,6 +14,8 @@ import { storageGet, storageSet } from '@/utils/extension-helpers';
 import * as utils from '@/utils/time';
 import APIService from './API';
 import UserService from './UserService';
+import InjectorService from './InjectorService';
+import logger from '@/utils/logger';
 
 enum REQUEST_PROCESS_ORIGIN {
   CONSTRUCTOR = 'constructor',
@@ -28,21 +30,17 @@ class BackgroundService {
   static SERVICE_NAME = 'BackgroundService';
   apiService: APIService;
   userService: UserService;
-  currentTabId: number | null = null;
-  currentIframeId: number | null = null;
-  currentTabUrl: string | null = null;
-  retryIntervalId: number | undefined = undefined;
+  injectorService: InjectorService;
   isProcessingData = false;
-  injectedAppInfo: null | {
-    tabId: number;
-    iframeId?: number;
-  } = null;
+  retryIntervalId: number | undefined = undefined;
   debouncedProcessingData = _debounce(this.#processData, SERVICE_THROTTLE_TIME);
 
   constructor() {
     this.apiService = new APIService();
+    this.injectorService = new InjectorService();
     this.userService = new UserService(this.apiService);
 
+    this.injectorService.registerEventListener();
     this.#setupCookieListeners();
     this.#setupNavigationListeners();
     this.#setupBridgeMessageListener();
@@ -51,7 +49,7 @@ class BackgroundService {
   #setupBridgeMessageListener() {
     const refreshPortalLoginStatus = async () => {
       if (this.isProcessingData) {
-        console.log(
+        logger.log(
           BackgroundService.SERVICE_NAME,
           'Bridge message',
           'Received message for refreshing Portal data. Processing already in progress. Skipping.',
@@ -65,7 +63,7 @@ class BackgroundService {
       const canRetrieveUserData = accessToken && email;
 
       if (!canRetrieveUserData) {
-        console.log(BackgroundService.SERVICE_NAME, 'Bridge message', 'No portal cookie found');
+        logger.log(BackgroundService.SERVICE_NAME, 'Bridge message', 'No portal cookie found');
 
         return null;
       }
@@ -75,26 +73,8 @@ class BackgroundService {
       return true;
     };
 
-    onMessage(COMMUNICATION_MESSAGE_KEYS.SETUP_INJECTOR, (data) => {
-      console.log(
-        BackgroundService.SERVICE_NAME,
-        'Bridge message',
-        'Received bridge message with message and data: ',
-        COMMUNICATION_MESSAGE_KEYS.SETUP_INJECTOR,
-        data,
-      );
-
-      const senderData = data.data;
-      const senderOrigin = (senderData as Record<string, string>).origin;
-
-      this.injectedAppInfo = {
-        tabId: this.currentTabId!,
-        iframeId: senderOrigin === 'iframe' ? this.currentIframeId! : undefined,
-      };
-    });
-
     onMessage(COMMUNICATION_MESSAGE_KEYS.RESET_PORTAL_DATA, async (data) => {
-      console.log(
+      logger.log(
         BackgroundService.SERVICE_NAME,
         'Bridge message',
         'Received bridge message with message and data: ',
@@ -105,6 +85,7 @@ class BackgroundService {
       const isRefreshedData = await refreshPortalLoginStatus();
       if (isRefreshedData) {
         sendMessage(COMMUNICATION_MESSAGE_KEYS.REFRESH_COUNTDOWN, null, data.sender);
+        this.injectorService.injectOrNotifyCountdownToChatFrame();
       }
     });
   }
@@ -120,25 +101,23 @@ class BackgroundService {
           return;
         }
 
-        console.log(BackgroundService.SERVICE_NAME, 'Cookie change detected', changeInfo);
+        logger.log(BackgroundService.SERVICE_NAME, 'Cookie change detected', changeInfo);
 
         if (changeInfo.cookie.value !== cookie) {
           this.debouncedProcessingData(REQUEST_PROCESS_ORIGIN.COOKIE_LISTENER);
-          console.log(BackgroundService.SERVICE_NAME, 'Triggering data processing due to cookie change.');
+          logger.log(BackgroundService.SERVICE_NAME, 'Triggering data processing due to cookie change.');
         }
       }
     });
   }
 
   #setupNavigationListeners() {
-    chrome.tabs.onRemoved.addListener(this.tabActiveListener);
-
     chrome.webNavigation.onCommitted.addListener((details) => {
-      const isCurrentTabReload = details.transitionType === 'reload' && this.currentTabId === details.tabId;
+      const url = new URL(details.url);
+      if (url.host === GOOGLE_CHAT_HOST && url.search.includes(GOOGLE_CHAT_FULL_SCREEN_FRAME_ID)) {
+        logger.log(BackgroundService.SERVICE_NAME, 'Detect chat page', details);
 
-      if (isCurrentTabReload) {
-        console.log(BackgroundService.SERVICE_NAME, 'Detect tab reload');
-        this.currentIframeId = null;
+        this.injectorService.addFrame(details.tabId, details.frameId);
       }
     });
 
@@ -148,19 +127,13 @@ class BackgroundService {
   }
 
   async #navigationHandler(details: chrome.webNavigation.WebNavigationFramedCallbackDetails) {
-    this.currentTabId = details.tabId;
-    this.currentTabUrl = details.url;
-    console.log(BackgroundService.SERVICE_NAME, 'Navigation completed:', details);
+    logger.log(BackgroundService.SERVICE_NAME, 'Navigation completed:', details);
 
     // Clear any existing retry interval when new navigation occurs
     if (this.retryIntervalId) {
       clearInterval(this.retryIntervalId);
       this.retryIntervalId = undefined;
-      console.log(BackgroundService.SERVICE_NAME, 'Cleared existing retry interval due to new navigation.');
-    }
-
-    if (!this.currentIframeId) {
-      await this.#storeChatFrameId();
+      logger.log(BackgroundService.SERVICE_NAME, 'Cleared existing retry interval due to new navigation.');
     }
 
     const isSuccess = await this.#processData(REQUEST_PROCESS_ORIGIN.CONSTRUCTOR);
@@ -170,167 +143,85 @@ class BackgroundService {
     }
   }
 
-  #storeChatFrameId() {
-    return new Promise((res, rej) => {
-      if (!this.currentTabId) {
-        rej(new Error(''));
-        return;
-      }
-
-      this.injectedAppInfo = null;
-
-      chrome.webNavigation.getAllFrames({ tabId: this.currentTabId }, (frames) => {
-        if (!frames || frames.length === 0) {
-          console.warn(BackgroundService.SERVICE_NAME, 'No frames found for the current tab.');
-
-          rej(new Error('No frames found'));
-        } else {
-          const chatPanelFrame = frames.find((frame) => frame.url.includes(GOOGLE_CHAT_FULL_SCREEN_FRAME_ID));
-
-          if (!chatPanelFrame) {
-            rej(new Error('No chat panel frame found'));
-          } else {
-            this.currentIframeId = chatPanelFrame.frameId;
-
-            console.log(BackgroundService.SERVICE_NAME, 'Chat panel frame found:', chatPanelFrame);
-            res(this.currentIframeId);
-          }
-        }
-      });
-    });
-  }
-
   async #fetchUserOverallData() {
     try {
       const sessionHeader = this.userService.getUserSessionId();
       if (!sessionHeader) {
-        console.log(BackgroundService.SERVICE_NAME, 'No portal cookie found or error fetching it.');
+        logger.log(BackgroundService.SERVICE_NAME, 'No portal cookie found or error fetching it.');
         await storageSet({ [STORAGE_KEYS.LOGIN_PORTAL_STATUS]: LOGIN_STATUS.NO_COOKIE });
 
         return;
       }
 
-      const data = await this.apiService.fetchUserOverallData(sessionHeader);
+      const result = await this.apiService.fetchUserOverallData(sessionHeader);
+
+      if (result.error) {
+        logger.log(BackgroundService.SERVICE_NAME, 'Error fetching user overall data:', result);
+
+        return;
+      }
+
+      const data = result.result;
 
       await storageSet({
         [STORAGE_KEYS.EMPLOYEE_ATTENDANCE]: data,
       });
     } catch (error) {
-      console.log(BackgroundService.SERVICE_NAME, 'Error fetching user overall data:', error);
+      logger.log(BackgroundService.SERVICE_NAME, 'Error fetching user overall data:', error);
     }
   }
 
   async #processData(caller: REQUEST_PROCESS_ORIGIN) {
     if (this.isProcessingData) {
-      console.log(BackgroundService.SERVICE_NAME, `Processing already in progress. Caller: ${caller}. Skipping.`);
+      logger.log(BackgroundService.SERVICE_NAME, `Processing already in progress. Caller: ${caller}. Skipping.`);
       return false; // Indicate not processed this time
     }
     this.isProcessingData = true;
-    console.log(BackgroundService.SERVICE_NAME, `Starting data processing. Called by: ${caller}`);
+    logger.log(BackgroundService.SERVICE_NAME, `Starting data processing. Called by: ${caller}`);
 
     try {
-      if (!this.currentTabId || !this.currentTabUrl) {
-        console.warn(BackgroundService.SERVICE_NAME, 'Cannot process data: currentTabId or currentTabUrl is not set.');
-        return false;
-      }
-
-      return await this.#mainDataHandler(this.currentTabId, this.currentTabUrl, this.currentIframeId!);
+      return await this.#mainDataHandler();
     } catch (error) {
-      console.error(BackgroundService.SERVICE_NAME, `Error during data processing (Caller: ${caller}):`, error);
-      if (this.currentTabId) this.injectOrNotifyCountdownToChatFrame(this.currentTabId, this.currentIframeId!); // Attempt to show error on page
+      logger.error(BackgroundService.SERVICE_NAME, `Error during data processing (Caller: ${caller}):`, error);
+
+      this.injectorService.injectOrNotifyCountdownToChatFrame(); // Attempt to show error on page
       return false;
     } finally {
       this.isProcessingData = false;
-      console.log(BackgroundService.SERVICE_NAME, 'Finished data processing.');
+      logger.log(BackgroundService.SERVICE_NAME, 'Finished data processing.');
     }
   }
 
-  tabActiveListener(tabId: number, removeInfo: chrome.tabs.TabRemoveInfo) {
-    console.log(BackgroundService.SERVICE_NAME, 'tabActiveListener change detect', { tabId, removeInfo });
-
-    if (this.injectedAppInfo?.tabId === tabId) {
-      console.log(BackgroundService.SERVICE_NAME, 'Clear inject tab info');
-
-      this.injectedAppInfo = null;
-    }
-  }
-
-  injectOrNotifyCountdownToChatFrame(tabId: number, frameId: number) {
-    if (this.injectedAppInfo) {
-      sendMessage(COMMUNICATION_MESSAGE_KEYS.REFRESH_COUNTDOWN, null, {
-        context: 'content-script',
-        tabId: this.injectedAppInfo.tabId,
-        frameId: this.injectedAppInfo.iframeId,
-      });
-
-      return;
-    }
-
-    chrome.scripting.executeScript(
-      {
-        target: { tabId, frameIds: [frameId] },
-        files: ['dist/scripts/injector.js'],
-      },
-      () => {
-        if (chrome.runtime.lastError) {
-          console.error(BackgroundService.SERVICE_NAME, 'Error injecting script: ', chrome.runtime.lastError.message);
-        }
-      },
-    );
-
-    chrome.scripting.insertCSS(
-      {
-        target: { tabId, frameIds: [frameId] },
-        files: ['dist/assets/sotatek-tlcd-v2.css'],
-      },
-      () => {
-        if (chrome.runtime.lastError) {
-          console.error(
-            BackgroundService.SERVICE_NAME,
-            'Error while injecting css: ',
-            chrome.runtime.lastError.message,
-          );
-          return;
-        }
-
-        console.log(BackgroundService.SERVICE_NAME, 'Insert css successfully');
-      },
-    );
-  }
-
-  async #mainDataHandler(tabId: number, currentUrl: string, frameId: number) {
-    if (currentUrl.includes('oi=1')) {
-      console.log(BackgroundService.SERVICE_NAME, "URL includes 'oi=1', skipping handler.");
-      return false; // Successfully skipped
-    }
+  async #mainDataHandler() {
     const sessionHeader = this.userService.getUserSessionId();
     if (!sessionHeader) {
-      console.log(BackgroundService.SERVICE_NAME, 'No portal cookie found or errors occured while fetching it.');
+      logger.log(BackgroundService.SERVICE_NAME, 'No portal cookie found or errors occured while fetching it.');
 
       await storageSet({ [STORAGE_KEYS.LOGIN_PORTAL_STATUS]: LOGIN_STATUS.NO_COOKIE });
-      this.injectOrNotifyCountdownToChatFrame(tabId, frameId);
+      this.injectorService.injectOrNotifyCountdownToChatFrame();
 
       return false;
     }
 
     const { needsUpdate } = await this.#checkIfDataUpdateNeeded();
     if (!needsUpdate) {
-      console.log(BackgroundService.SERVICE_NAME, 'Data is fresh, and login session is up. Injecting content script.');
-      this.injectOrNotifyCountdownToChatFrame(tabId, frameId);
+      logger.log(BackgroundService.SERVICE_NAME, 'Data is fresh, and login session is up. Injecting content script.');
+      this.injectorService.injectOrNotifyCountdownToChatFrame();
+
       return true;
     }
 
     const sotatekEmail = await this.userService.getUserEmail();
 
     if (!sotatekEmail) {
-      console.log(BackgroundService.SERVICE_NAME, "Cannot get user's email, try to access portal again");
-      this.injectOrNotifyCountdownToChatFrame(tabId, frameId);
+      logger.log(BackgroundService.SERVICE_NAME, "Cannot get user's email, try to access portal again");
+      this.injectorService.injectOrNotifyCountdownToChatFrame();
 
       return false;
     }
 
     await this.#fetchUserOverallData();
-    return this.#fetchStoreCheckInDataAndInjectCountdown(sessionHeader, sotatekEmail, tabId, frameId);
+    return this.#fetchStoreCheckInDataAndInjectCountdown(sessionHeader, sotatekEmail);
   }
 
   async #checkIfDataUpdateNeeded() {
@@ -356,25 +247,25 @@ class BackgroundService {
         needsUpdate: true,
       };
     } catch (error) {
-      console.error('Error checking if data update is needed:', error);
+      logger.error('Error checking if data update is needed:', error);
       return { needsUpdate: true }; // Assume update needed on error
     }
   }
 
   async #fetchAndStoreCheckInData(accessHeader: string, email: string) {
     if (!email) {
-      console.error(BackgroundService.SERVICE_NAME, 'Sotatek email is missing, cannot fetch portal data.');
+      logger.error(BackgroundService.SERVICE_NAME, 'Sotatek email is missing, cannot fetch portal data.');
       await storageSet({ [STORAGE_KEYS.LOGIN_PORTAL_STATUS]: LOGIN_STATUS.SESSION_EXPIRED }); // Or a new status like "MISSING_EMAIL"
 
       return false;
     }
 
-    console.log(BackgroundService.SERVICE_NAME, `Fetching user ID for email: ${email}`);
+    logger.log(BackgroundService.SERVICE_NAME, `Fetching user ID for email: ${email}`);
 
     const userId = await this.userService.getUserId();
 
     if (!userId) {
-      console.error(BackgroundService.SERVICE_NAME, 'Failed to fetch user ID or session expired');
+      logger.error(BackgroundService.SERVICE_NAME, 'Failed to fetch user ID or session expired');
       await storageSet({ [STORAGE_KEYS.LOGIN_PORTAL_STATUS]: LOGIN_STATUS.SESSION_EXPIRED });
 
       return false;
@@ -386,11 +277,11 @@ class BackgroundService {
     const today = utils.getCurrentFormattedDate();
     const tomorrow = utils.getCurrentFormattedDate(1);
 
-    console.log(BackgroundService.SERVICE_NAME, `Fetching daily data for user ${userId} from ${today} to ${tomorrow}`);
+    logger.log(BackgroundService.SERVICE_NAME, `Fetching daily data for user ${userId} from ${today} to ${tomorrow}`);
 
     const todayCheckinData = await this.apiService.fetchUserData(accessHeader, userId, today, tomorrow);
 
-    console.log(BackgroundService.SERVICE_NAME, 'Fetched Daily Data:', todayCheckinData);
+    logger.log(BackgroundService.SERVICE_NAME, 'Fetched Daily Data:', todayCheckinData);
 
     let hasRetrievedTodayCheckinData = false;
 
@@ -398,9 +289,9 @@ class BackgroundService {
       await storageSet({ [STORAGE_KEYS.EMPLOYEE_DATA]: todayCheckinData });
 
       hasRetrievedTodayCheckinData = true;
-      console.log(BackgroundService.SERVICE_NAME, 'Successfully fetched and stored daily user data.');
+      logger.log(BackgroundService.SERVICE_NAME, 'Successfully fetched and stored daily user data.');
     } else {
-      console.error(BackgroundService.SERVICE_NAME, 'Failed to fetch daily user data:', todayCheckinData.error);
+      logger.error(BackgroundService.SERVICE_NAME, 'Failed to fetch daily user data:', todayCheckinData.error);
     }
 
     // Fetch monthly data
@@ -411,43 +302,38 @@ class BackgroundService {
       new Date(lastDayDate.getFullYear(), lastDayDate.getMonth(), lastDayDate.getDate() + 1),
     );
 
-    console.log(
+    logger.log(
       BackgroundService.SERVICE_NAME,
       `Fetching monthly data for user ${userId} from ${firstDay} to ${nextDayAfterLast}`,
     );
 
     const monthlyData = await this.apiService.fetchUserData(accessHeader, userId, firstDay, nextDayAfterLast);
 
-    console.log(BackgroundService.SERVICE_NAME, 'Fetched Monthly Data:', monthlyData);
+    logger.log(BackgroundService.SERVICE_NAME, 'Fetched Monthly Data:', monthlyData);
 
     if (monthlyData.result !== undefined && !monthlyData.error) {
       await storageSet({ [STORAGE_KEYS.EMPLOYEE_MONTH_DATA]: monthlyData });
 
-      console.log(BackgroundService.SERVICE_NAME, 'Successfully fetched and stored monthly user data.');
+      logger.log(BackgroundService.SERVICE_NAME, 'Successfully fetched and stored monthly user data.');
     } else {
-      console.error(BackgroundService.SERVICE_NAME, 'Failed to fetch monthly user data:', monthlyData.error);
+      logger.error(BackgroundService.SERVICE_NAME, 'Failed to fetch monthly user data:', monthlyData.error);
     }
 
     const todayData = todayCheckinData?.result?.records?.[0];
 
     // If today check in is not push to the server yet, return false to trigger retry mechanism
     if (todayData && !todayData.check_in) {
-      console.log(BackgroundService.SERVICE_NAME, "Failed to get today's checkin data, retry...");
+      logger.log(BackgroundService.SERVICE_NAME, "Failed to get today's checkin data, retry...");
       hasRetrievedTodayCheckinData = false;
     }
 
     return hasRetrievedTodayCheckinData;
   }
 
-  async #fetchStoreCheckInDataAndInjectCountdown(
-    sessionHeader: string,
-    sotatekEmail: string,
-    tabId: number,
-    frameId: number,
-  ) {
+  async #fetchStoreCheckInDataAndInjectCountdown(sessionHeader: string, sotatekEmail: string) {
     const hasRetrievedTodayCheckinData = await this.#fetchAndStoreCheckInData(sessionHeader, sotatekEmail);
 
-    this.injectOrNotifyCountdownToChatFrame(tabId, frameId);
+    this.injectorService.injectOrNotifyCountdownToChatFrame();
 
     return hasRetrievedTodayCheckinData; // Overall success depends on fetching crucial daily data
   }
@@ -456,16 +342,16 @@ class BackgroundService {
     if (this.retryIntervalId) {
       clearInterval(this.retryIntervalId); // Clear existing one if any
     }
-    console.log(BackgroundService.SERVICE_NAME, 'Setting up retry mechanism for data processing.');
+    logger.log(BackgroundService.SERVICE_NAME, 'Setting up retry mechanism for data processing.');
     this.retryIntervalId = setInterval(async () => {
-      console.log(BackgroundService.SERVICE_NAME, 'Retrying data processing');
+      logger.log(BackgroundService.SERVICE_NAME, 'Retrying data processing');
       const success = await this.#processData(REQUEST_PROCESS_ORIGIN.CONSTRUCTOR_RETRY);
       if (success) {
-        console.log(BackgroundService.SERVICE_NAME, 'Successfully fetched and stored data, close retry mechanism.');
+        logger.log(BackgroundService.SERVICE_NAME, 'Successfully fetched and stored data, close retry mechanism.');
         clearInterval(this.retryIntervalId);
         this.retryIntervalId = undefined;
       } else {
-        console.log(BackgroundService.SERVICE_NAME, 'Retry failed.');
+        logger.log(BackgroundService.SERVICE_NAME, 'Retry failed.');
       }
     }, FETCH_DATA_RETRY_INTERVAL); // Retry every 15 seconds
   }

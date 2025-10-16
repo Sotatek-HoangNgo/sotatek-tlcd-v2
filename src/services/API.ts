@@ -2,6 +2,7 @@
 
 import { IOverviewAttendanceData } from '@/@types/attendance';
 import { PORTAL_DOMAIN } from '@/constants/config';
+import logger from '@/utils/logger';
 
 interface APIResponse<T> {
   jsonrpc: string;
@@ -57,12 +58,12 @@ class APIService {
         }),
       });
       if (!response.ok) {
-        console.error('Fetch User ID failed with status:', response.status);
+        logger.error('Fetch User ID failed with status:', response.status);
         return { error: `HTTP error ${response.status}`, result: undefined };
       }
       return await response.json();
     } catch (error) {
-      console.error('Error while fetching user ID:', error);
+      logger.error('Error while fetching user ID:', error);
       return {
         error: 'Network or parsing error during fetchUserId',
         details: error,
@@ -95,13 +96,18 @@ class APIService {
       if (response.ok) {
         const result: APIResponse<IOverviewAttendanceData[]> = await response.json();
 
-        return result;
+        if (result.error) {
+          logger.error('Fetch User overall data failed with error:', result.error);
+          return { error: result.error, result: undefined };
+        }
+
+        return { result, error: undefined };
       } else {
-        console.error('Fetch User overall data failed with status:', response.status);
+        logger.error('Fetch User overall data failed with status:', response.status);
         return { error: `HTTP error ${response.status}`, result: undefined };
       }
     } catch (error) {
-      console.error('Error while fetching user overall data:', error);
+      logger.error('Error while fetching user overall data:', error);
       return {
         error: 'Network or parsing error during fetchUserOverallData',
         details: error,
@@ -150,12 +156,12 @@ class APIService {
         }),
       });
       if (!response.ok) {
-        console.error('Fetch User Data failed with status:', response.status);
+        logger.error('Fetch User Data failed with status:', response.status);
         return { error: `HTTP error ${response.status}`, result: undefined };
       }
       return await response.json();
     } catch (error) {
-      console.error('Error while fetching user data:', error);
+      logger.error('Error while fetching user data:', error);
       return {
         error: 'Network or parsing error during fetchUserData',
         details: error,
@@ -175,11 +181,11 @@ class APIService {
       if (response.ok) {
         return { result: await response.text(), error: undefined };
       } else {
-        console.error('Retrieve User Portal Hompage failed with status:', response.status);
+        logger.error('Retrieve User Portal Hompage failed with status:', response.status);
         return { error: `HTTP error ${response.status}`, result: undefined };
       }
     } catch (error) {
-      console.error('Error while retrieving user portal homepage:', error);
+      logger.error('Error while retrieving user portal homepage:', error);
       return {
         error: 'Network or parsing error during retrieveUserPortalHompage',
         details: error,

@@ -8,6 +8,7 @@ import {
   WORKING_MINUTES_DURATION,
 } from '@/constants/config';
 import { storageGet } from '@/utils/extension-helpers';
+import logger from '@/utils/logger';
 import * as utils from '@/utils/time';
 
 interface IProps {
@@ -42,7 +43,7 @@ export function useCountdownTimeLeft({ onNoCheckingData, onCountdownEnd }: IProp
     todayCheckinData.value = checkinData;
 
     if (!checkinData?.check_in) {
-      console.log(LOG_PREFIX, 'No checkin data');
+      logger.log(LOG_PREFIX, 'No checkin data');
       return onNoCheckingData(!checkinData);
     }
 

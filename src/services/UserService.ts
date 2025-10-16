@@ -1,6 +1,7 @@
 import { GOOGLE_CHAT_HOST, GOOGLE_MAIL_CHAT_URL, PORTAL_DOMAIN, STORAGE_KEYS } from '@/constants/config';
 import APIService from './API';
 import { executeScript, storageSet } from '@/utils/extension-helpers';
+import logger from '@/utils/logger';
 
 enum EUSER_REQUEST_ID {
   GET_USER_EMAIL = 'get-user-email',
@@ -34,6 +35,24 @@ class UserService {
     await this.fetchUserCheckInId();
   }
 
+  resetCurrentSession() {
+    this.clearSessionData();
+    this.email = {
+      status: 'initial',
+      value: '',
+    };
+    this.uid = {
+      status: 'initial',
+      value: '',
+    };
+  }
+
+  clearSessionData() {
+    this.sessionId = '';
+
+    logger.log('UserService', 'Cleared session data, need to login portal again');
+  }
+
   async retrieveUserSessionId() {
     try {
       const cookies = await chrome.cookies.getAll({ domain: PORTAL_DOMAIN });
@@ -41,7 +60,7 @@ class UserService {
 
       this.sessionId = sessionId ?? '';
     } catch (error) {
-      console.error('UserService', "Error occured while getting portal's cookies, check the site");
+      logger.error('UserService', "Error occured while getting portal's cookies, check the site");
     }
   }
 
@@ -69,11 +88,11 @@ class UserService {
 
       const userResponse = await request;
 
-      console.log('UserService', 'Fetched User Response:', userResponse);
+      logger.log('UserService', 'Fetched User Response:', userResponse);
 
       if (userResponse.error || !userResponse.result?.records?.length) {
         this.uid.status = 'error';
-        console.error(
+        logger.error(
           'UserService',
           'Failed to fetch user ID or session expired:',
           userResponse.error || 'No user records',
@@ -82,13 +101,24 @@ class UserService {
         return;
       }
 
+      if (userResponse.result.error) {
+        this.uid.status = 'error';
+        logger.error('UserService', 'Failed to fetch user ID:', userResponse.result.error);
+
+        if (userResponse.result.error.data.name === 'odoo.http.SessionExpiredException') {
+          this.resetCurrentSession();
+        }
+
+        return;
+      }
+
       const userId = userResponse.result.records[0].attendance_machine_id;
-      console.log('UserService', 'Fetched User ID:', userId);
+      logger.log('UserService', 'Fetched User ID:', userId);
 
       this.uid.status = 'fresh';
       this.uid.value = userId;
     } catch (error) {
-      console.error('UserService', 'Encountered error while retrieving user ID', error);
+      logger.error('UserService', 'Encountered error while retrieving user ID', error);
       this.uid.status = 'error';
     } finally {
       this.pendingRequests = this.pendingRequests.filter((request) => request.id !== EUSER_REQUEST_ID.GET_USER_ID);
@@ -97,7 +127,7 @@ class UserService {
 
   async fetchUserEmail() {
     if (!this.sessionId) {
-      console.log('UserService', 'Cannot retrieve session cookie, login portal again');
+      logger.log('UserService', 'Cannot retrieve session cookie, login portal again');
 
       return;
     }
@@ -121,6 +151,18 @@ class UserService {
       });
 
       const result = await retrieveRequest;
+      const isExpiredLoginSession = result.result?.includes('odoo.http.SessionExpiredException');
+
+      if (isExpiredLoginSession) {
+        this.resetCurrentSession();
+
+        this.email.status = 'error';
+        this.email.value = '';
+        logger.log('UserService', 'Session expired, login portal again');
+
+        return;
+      }
+
       if (result.result) {
         const userHomepageHtml = result.result;
         const userInfo = JSON.parse(
@@ -139,7 +181,7 @@ class UserService {
       }
     } catch (error) {
       this.email.status = 'error';
-      console.log(
+      logger.log(
         'UserService',
         "Encountered error while retrieving user email, fallback to chat's email extraction, error info:",
         error,
@@ -207,7 +249,7 @@ class UserService {
   async extractUserEmailFromGmailChatTab() {
     const mailTabs = await chrome.tabs.query({ url: `${GOOGLE_MAIL_CHAT_URL}/*` });
     if (!mailTabs.length) {
-      console.log('UserService', 'Failed to get gmail chat tab, check to see if the tab is closed');
+      logger.log('UserService', 'Failed to get gmail chat tab, check to see if the tab is closed');
 
       return;
     }
@@ -217,7 +259,7 @@ class UserService {
 
     try {
       const injectionResults = await executeScript({
-        target: { tabId: tabId },
+        target: { tabId },
         func: () => {
           const elements = document.querySelectorAll('script');
           const emailRegex = /"([\w.-]+@sotatek\.com)"/i; // Case-insensitive, capturing group
@@ -238,16 +280,16 @@ class UserService {
       const email = injectionResults?.[0]?.result;
 
       if (email) {
-        console.log('UserService', 'Extracted Sotatek email:', email);
+        logger.log('UserService', 'Extracted Sotatek email:', email);
         this.email.status = 'fresh';
         return (this.email.value = email);
       }
 
-      console.warn('UserService', 'Could not extract Sotatek email from the page.');
+      logger.log('UserService', 'Could not extract Sotatek email from the page.');
 
       return null;
     } catch (error) {
-      console.error('UserService', 'Error executing script to extract email:', error);
+      logger.error('UserService', 'Error executing script to extract email:', error);
 
       return null;
     }

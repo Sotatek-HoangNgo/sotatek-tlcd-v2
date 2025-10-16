@@ -2,7 +2,7 @@
 export const PORTAL_DOMAIN = 'portal.sotatek.com';
 export const GOOGLE_CHAT_HOST = 'chat.google.com';
 export const GOOGLE_MAIL_CHAT_URL = 'https://mail.google.com/chat';
-export const GOOGLE_CHAT_FULL_SCREEN_FRAME_ID = 'id=single_full_screen';
+export const GOOGLE_CHAT_FULL_SCREEN_FRAME_ID = 'wfi=gtn-brain-iframe-id';
 export const LOG_PREFIX = 'Sotatek TLCD Injector:';
 
 export const STORAGE_KEYS = {
@@ -22,10 +22,10 @@ export const LOGIN_STATUS = {
 } as const;
 
 export const COMMUNICATION_MESSAGE_KEYS = {
-  INIT_CONNECTION: 'init_connection',
   REFRESH_COUNTDOWN: 'refresh_countdown',
   RESET_PORTAL_DATA: 'reset_portal_data',
-  SETUP_INJECTOR: 'setup_injector',
+  PING: 'ping',
+  INJECTOR_READY: 'injector_ready',
 } as const;
 
 // Constants for UI elements and classes (will be used in refactored version)
@@ -40,8 +40,10 @@ export const UI_IDS = {
 // Class names for Google Chat UI (these are fragile and might change)
 export const GCHAT_INJECT_TARGET_SELECTOR = {
   LEFT_PANEL_CONTAINER: '.oy8Mbf:not(.bGI)',
-  IFRAME_LEFT_PANEL: '.SuElue',
-};
+  IFRAME_LEFT_PANEL: '.SuElue.GtB41',
+  LEFT_PANEL: '#gtn-roster-iframe-id',
+  FULLSCREEN_PANEL: '#gtn-brain-iframe-id',
+} as const;
 
 // Other constants
 export const TIMEZONE_OFFSET_HOURS = 7; // For converting UTC check-in to local time

@@ -147,8 +147,9 @@ import useLoginStatus from '@/hooks/useLoginStatus';
 import useYearLeaveData from '@/hooks/useYearLeaveData';
 import { fetchGoHomeMessageText } from '@/utils/mics';
 import { ref } from 'vue';
-import _once from 'lodash/once';
-import useBrigdeMessaging from './hooks/useBrigdeMessaging';
+import useCountdownActivities from '@/hooks/useCountdownActivities';
+
+const { registerRefreshCountdownListener, requestRefreshData } = useCountdownActivities();
 
 const overrideMessage = ref<IMessage>({
   message: '',
@@ -168,8 +169,6 @@ const { getUserAttendanceInfo, message, workInfo } = useCountdownTimeLeft({
   onNoCheckingData: noTodayCheckinDataNotify,
   onCountdownEnd: displayGoHomeMessage,
 });
-
-const { registerRefreshCountdownListener, requestRefreshData } = useBrigdeMessaging();
 
 function noTodayCheckinDataNotify(isCheckedIn: boolean) {
   overrideMessage.value = {

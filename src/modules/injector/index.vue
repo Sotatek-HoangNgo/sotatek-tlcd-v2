@@ -84,9 +84,11 @@ import useCalculateMonthlyLateness from '@/hooks/useCalculateMonthlyLateness';
 import { useCountdownTimeLeft } from '@/hooks/useCountdownTimeLeft';
 import useLoginStatus from '@/hooks/useLoginStatus';
 import { fetchGoHomeMessageText } from '@/utils/mics';
-import useBrigdeMessaging from './utils/bridgeMessaging';
+import useAppActivities from '@/hooks/useAppActivities';
+import useCountdownActivities from '@/hooks/useCountdownActivities';
 
-const { registerRefreshCountdownListener } = useBrigdeMessaging();
+useAppActivities();
+const { registerRefreshCountdownListener } = useCountdownActivities('injector');
 
 const { getUserAttendanceInfo, message, workInfo } = useCountdownTimeLeft({
   onNoCheckingData: noTodayCheckinDataNotify,

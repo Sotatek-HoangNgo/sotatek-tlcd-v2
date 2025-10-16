@@ -2,6 +2,7 @@ import { IOverviewAttendanceData, ITimekeepingRecord } from '@/@types/attendance
 import { LOG_PREFIX, MONTHLY_LATE_ALLOWANCE_MINUTES, STORAGE_KEYS } from '@/constants/config';
 import { storageGet } from '@/utils/extension-helpers';
 import { extractCurrentMonthFundData } from '@/utils/extract-attendance-data';
+import logger from '@/utils/logger';
 
 interface ILateDates {
   date: string;
@@ -25,7 +26,7 @@ export default function useCalculateMonthlyLateness() {
     const cannotExtractMonthlyData = extractedMonthlyData.remainFund < 0;
 
     lateDates.value = await getLateDatesInCurrentMonth();
-    console.log(LOG_PREFIX, 'Calculated monthly lateness getLateDatesInCurrentMonth:', lateDates.value);
+    logger.log(LOG_PREFIX, 'Calculated monthly lateness getLateDatesInCurrentMonth:', lateDates.value);
 
     if (!records?.length || cannotExtractMonthlyData) {
       return manualCalculateMonthLatest();
@@ -78,9 +79,9 @@ export default function useCalculateMonthlyLateness() {
       currentMonthFundUsed.value = Math.min(cumulatedUsedFund, MONTHLY_LATE_ALLOWANCE_MINUTES);
       remainMonthlyLateFund.value = Math.max(0, MONTHLY_LATE_ALLOWANCE_MINUTES - cumulatedUsedFund);
       currentMonthLateMinutes.value = cumulatedLackingWorks;
-      console.log(LOG_PREFIX, 'Calculated monthly lateness:', remainMonthlyLateFund.value, 'mins');
+      logger.log(LOG_PREFIX, 'Calculated monthly lateness:', remainMonthlyLateFund.value, 'mins');
     } catch (error) {
-      console.error(LOG_PREFIX, 'Error calculating monthly lateness:', error);
+      logger.error(LOG_PREFIX, 'Error calculating monthly lateness:', error);
       remainMonthlyLateFund.value = 0; // Default on error
     }
   }
@@ -139,7 +140,7 @@ export default function useCalculateMonthlyLateness() {
 
       return lackingWorkDates;
     } catch (error) {
-      console.log('Error while retrieve lacking work dates');
+      logger.log('Error while retrieve lacking work dates');
 
       return [];
     }

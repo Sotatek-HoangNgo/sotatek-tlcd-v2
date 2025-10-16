@@ -1,6 +1,5 @@
 import { createApp } from 'vue';
 import CountdownApp from '@/modules/injector/index.vue';
-import { notifyAppMountMessage } from '@/modules/injector/utils/bridgeMessaging';
 import { GCHAT_INJECT_TARGET_SELECTOR, LOG_PREFIX, UI_IDS } from '@/constants/config';
 
 import '@/styles/styles.css';
@@ -53,8 +52,6 @@ function setupUI() {
   }
 
   container.classList.add(UI_IDS.APP_CONTAINER);
-
-  notifyAppMountMessage(isInjectToIframe);
 
   app.mount(container);
 
