@@ -2,7 +2,7 @@
   "name": "Sotatek Time Left Countdown Beta 3",
   "manifest_version": 3,
   "version": "3.0.1",
-  "description": "This extension calculates time to left (the.do 07/12/2022)",
+  "description": "This extension calculates time to left. Orginated by Martin the.do 07/12/2022 and reworked by hoang.ngo",
   "permissions": [
     "webNavigation",
     "cookies",

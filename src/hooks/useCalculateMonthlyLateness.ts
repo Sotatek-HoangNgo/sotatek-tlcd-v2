@@ -115,7 +115,10 @@ export default function useCalculateMonthlyLateness() {
         if (lateAmount > 0) {
           const usedFund = record.minus_fund ?? 0;
           const workLack = record.work_lack ?? 0;
-          let dateLackInfo = `Date ${recordDate.getDate() + 1}/${recordDate.getMonth() + 1}`;
+          const workLackDate = recordDate.getDate();
+          const currentMonth = recordDate.getMonth() + 1;
+
+          let dateLackInfo = `Date ${workLackDate}/${currentMonth}`;
 
           if (usedFund > 0) {
             dateLackInfo += ` used ${usedFund} mins fund,`;
@@ -126,7 +129,7 @@ export default function useCalculateMonthlyLateness() {
           }
 
           lackingWorkDates.push({
-            date: `${recordDate.getDate() + 1}/${recordDate.getMonth() + 1}`,
+            date: `${workLackDate}/${currentMonth}`,
             lateAmount,
             minusFund: usedFund,
             workLack,

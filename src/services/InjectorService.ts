@@ -156,13 +156,9 @@ class InjectorService {
       }
     });
 
-    logger.log(InjectorService.SERVICE_NAME, 'Inactive frames:', inactiveFrames);
-
     if (inactiveFrames.length) {
       this.removeFrames(inactiveFrames);
     }
-
-    logger.log(InjectorService.SERVICE_NAME, 'Remain tracking frames:', this.framesList);
   }
 }
 
